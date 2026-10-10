@@ -44,7 +44,7 @@ export function Visualizer({ junction, phases, optimizedPlan, baselinePlan }: Pr
         plan.phases[phaseIdx].movements.forEach((m) => green.add(`${m.approach}:${m.movement}`))
         carSim.step(dt * speed, green)
       }
-      drawJunction(ctx, junction, geom, phases, phaseIdx, greenLeft, plan, t, carSim.positions())
+      drawJunction(ctx, junction, geom, phases, phaseIdx, greenLeft, plan, t, carSim.positions(), carSim)
       rafRef.current = requestAnimationFrame(frame)
     }
     rafRef.current = requestAnimationFrame(frame)

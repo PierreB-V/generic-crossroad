@@ -1,6 +1,6 @@
 import type { Junction, Phase, SignalPlan } from '../model/types'
 import { LANE_PX, type JunctionGeom } from './canvasGeometry'
-import type { CarPos } from './carSim'
+import type { CarPos, CarSim } from './carSim'
 
 const TURN_COLORS: Record<string, string> = {
   left: '#38bdf8',
@@ -24,6 +24,7 @@ export function drawJunction(
   plan: SignalPlan,
   t: number,
   cars: CarPos[],
+  carSim: CarSim,
 ) {
   ctx.fillStyle = '#1e293b'
   ctx.fillRect(0, 0, 640, 640)
@@ -113,6 +114,39 @@ export function drawJunction(
   ctx.fillText(`t = ${t.toFixed(1)}s`, 12, 24)
   ctx.fillText(`Phase ${activePhase + 1} green left: ${greenLeft.toFixed(0)}s`, 12, 44)
   ctx.fillText(`Cycle plan: ${plan.greenSec.join('/')}s`, 12, 64)
+
+  // live stats per movement
+  const stats = carSim.stats()
+  const labelOf = (key: string) => {
+    const [ai, mi] = key.split(':').map(Number)
+    const app = junction.approaches[ai]
+    const heading = ['N', 'E', 'S', 'W'][Math.round(((app.heading % 360) + 360) % 360 / 90) % 4]
+    const turn = app.movements[mi].turn[0].toUpperCase()
+    return `${heading}${turn}`
+  }
+  ctx.font = '12px sans-serif'
+  ctx.fillStyle = '#94a3b8'
+  ctx.fillText('Movement', 12, 92)
+  ctx.fillText('Queued', 100, 92)
+  ctx.fillText('Flow', 160, 92)
+  ctx.fillText('Demand', 230, 92)
+  stats.forEach((s, i) => {
+    const y = 108 + i * 16
+    ctx.fillStyle = TURN_COLORS[s.turn] ?? '#e2e8f0'
+    ctx.fillText(labelOf(s.key), 12, y)
+    ctx.fillStyle = '#e2e8f0'
+    ctx.fillText(String(s.queued), 100, y)
+    ctx.fillText(`${Math.round(s.actualVph)} veh/h`, 160, y)
+    ctx.fillStyle = s.actualVph > 0 && s.actualVph < s.demandVph * 0.7 ? '#f87171' : '#94a3b8'
+    ctx.fillText(`${s.demandVph} veh/h`, 230, y)
+    // small bar: actual vs demand
+    const barMax = 60
+    const scale = s.demandVph > 0 ? Math.min(s.actualVph / s.demandVph, 1) : 0
+    ctx.fillStyle = '#334155'
+    ctx.fillRect(300, y - 9, barMax, 8)
+    ctx.fillStyle = scale >= 0.99 ? '#4ade80' : scale >= 0.7 ? '#fbbf24' : '#f87171'
+    ctx.fillRect(300, y - 9, barMax * scale, 8)
+  })
 
   // legend
   const lx = 470

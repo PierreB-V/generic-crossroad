@@ -42,7 +42,9 @@ export class CarSim {
   private spawnAcc = new Map<string, number>()
   private release = new Map<string, number>()
   private paths = new Map<string, Path>()
+  private clearedPerKey = new Map<string, number>()
   cleared = 0
+  simTime = 0
 
   constructor(
     private junction: Junction,
@@ -86,12 +88,14 @@ export class CarSim {
         this.crossing.set(key, [])
         this.spawnAcc.set(key, 0)
         this.release.set(key, 0)
+        this.clearedPerKey.set(key, 0)
         void lane
       })
     })
   }
 
   step(dt: number, green: Set<string>) {
+    this.simTime += dt
     this.junction.approaches.forEach((app, ai) => {
       app.movements.forEach((m, mi) => {
         const key = `${ai}:${mi}`
@@ -116,6 +120,7 @@ export class CarSim {
           car.cross = 0
           this.crossing.get(key)!.push(car)
           this.release.set(key, 3600 / Math.max(m.saturationVph, 1))
+          this.clearedPerKey.set(key, this.clearedPerKey.get(key)! + 1)
         } else {
           this.release.set(key, rel)
         }
@@ -138,6 +143,37 @@ export class CarSim {
         }
       })
     })
+  }
+
+  /** Live stats per movement: queue length, measured outflow vs demand. */
+  stats(): {
+    key: string
+    turn: string
+    queued: number
+    demandVph: number
+    actualVph: number
+  }[] {
+    const out: {
+      key: string
+      turn: string
+      queued: number
+      demandVph: number
+      actualVph: number
+    }[] = []
+    this.junction.approaches.forEach((app, ai) => {
+      app.movements.forEach((m, mi) => {
+        const key = `${ai}:${mi}`
+        const cleared = this.clearedPerKey.get(key) ?? 0
+        out.push({
+          key,
+          turn: m.turn,
+          queued: this.inbound.get(key)?.length ?? 0,
+          demandVph: m.demandVph,
+          actualVph: this.simTime > 5 ? (cleared / this.simTime) * 3600 : 0,
+        })
+      })
+    })
+    return out
   }
 
   positions(): CarPos[] {
