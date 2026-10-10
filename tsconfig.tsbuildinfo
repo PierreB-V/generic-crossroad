@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/ga/fitness.ts","./src/ga/ga.ts","./src/model/phases.ts","./src/model/types.ts","./src/sim/simulator.ts","./src/ui/Editor.tsx","./src/ui/Optimizer.tsx","./src/ui/Visualizer.tsx","./src/ui/canvasGeometry.ts","./src/ui/canvasRender.ts"],"version":"5.9.3"}
