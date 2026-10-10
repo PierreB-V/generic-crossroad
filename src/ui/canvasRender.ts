@@ -1,5 +1,6 @@
 import type { Junction, Phase, SignalPlan } from '../model/types'
 import { LANE_PX, type JunctionGeom } from './canvasGeometry'
+import type { CarPos } from './carSim'
 
 const TURN_COLORS: Record<string, string> = {
   left: '#38bdf8',
@@ -22,6 +23,7 @@ export function drawJunction(
   greenLeft: number,
   plan: SignalPlan,
   t: number,
+  cars: CarPos[],
 ) {
   ctx.fillStyle = '#1e293b'
   ctx.fillRect(0, 0, 640, 640)
@@ -88,22 +90,21 @@ export function drawJunction(
       drawTurnGlyph(ctx, m.turn, cx, cy, lane.inbound, active ? TURN_COLORS[m.turn] : GRAY)
     })
 
-    // queued cars stacked inside their own lane
-    app.movements.forEach((m, mi) => {
-      const ml = geom.movementLanes.get(`${ai}:${mi}`)
-      if (!ml) return
-      const active = phase.movements.some((x) => x.approach === ai && x.movement === mi)
-      const demand = m.demandVph / 3600
-      const queueLen = active
-        ? Math.max(0, Math.round(demand * (30 - greenLeft) * 0.3))
-        : Math.round(demand * (t % 40) * 0.5)
-      for (let q = 0; q < Math.min(queueLen, 10); q++) {
-        const px = ml.origin.x + lane.inbound.x * (14 + q * 13)
-        const py = ml.origin.y + lane.inbound.y * (14 + q * 13)
-        ctx.fillStyle = active ? TURN_COLORS[m.turn] : '#fbbf24'
-        ctx.fillRect(px - 5, py - 6, 10, 12)
-      }
-    })
+  })
+
+  // moving cars
+  cars.forEach((c) => {
+    const [ai, mi] = c.key.split(':').map(Number)
+    const m = junction.approaches[ai].movements[mi]
+    ctx.save()
+    ctx.translate(c.x, c.y)
+    ctx.rotate(c.heading)
+    ctx.fillStyle = c.crossing ? TURN_COLORS[m.turn] : '#fbbf24'
+    ctx.fillRect(-6, -4, 12, 8)
+    ctx.strokeStyle = '#0f172a'
+    ctx.lineWidth = 1
+    ctx.strokeRect(-6, -4, 12, 8)
+    ctx.restore()
   })
 
   // HUD
