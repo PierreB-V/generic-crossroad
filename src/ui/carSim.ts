@@ -1,6 +1,6 @@
 import type { Junction } from '../model/types'
-import { movementVector } from '../model/phases'
-import type { JunctionGeom } from './canvasGeometry'
+import { HEADING_VEC, movementVector } from '../model/phases'
+import { LANE_PX, type JunctionGeom } from './canvasGeometry'
 
 export interface CarPos {
   x: number
@@ -55,19 +55,32 @@ export class CarSim {
         const key = `${ai}:${mi}`
         const lane = this.geom.lanes[ai]
         const ml = this.geom.movementLanes.get(key)!
+        const laneIndex = ml.laneIndex
         const exit = movementVector(this.junction, { approach: ai, movement: mi })
-        const exitEdge = {
-          x: this.geom.center.x + exit.x * (this.geom.box / 2),
-          y: this.geom.center.y + exit.y * (this.geom.box / 2),
+        // destination approach: the one whose inbound matches the exit direction
+        const destAi = this.junction.approaches.findIndex((app) => {
+          const v = HEADING_VEC[((app.heading % 360) + 360) % 360]
+          return v.x === exit.x && v.y === exit.y
+        })
+        // exit lane center: mirrored across the road center line (outgoing half)
+        const exitLaneOffset = -(laneIndex + 0.5) * LANE_PX
+        void destAi
+        const exitEdgeStart = {
+          x: this.geom.center.x + exit.x * (this.geom.box / 2) + this.geom.lanes[ai].lateral.x * exitLaneOffset,
+          y: this.geom.center.y + exit.y * (this.geom.box / 2) + this.geom.lanes[ai].lateral.y * exitLaneOffset,
         }
-        // quadratic curve from stop line through the box center to the exit edge
+        // quadratic curve from stop line through the box center to the exit lane start
         const pts: { x: number; y: number }[] = []
+        const ctrl = {
+          x: (ml.origin.x + exitEdgeStart.x) / 2,
+          y: (ml.origin.y + exitEdgeStart.y) / 2,
+        }
         for (let s = 0; s <= 16; s++) {
           const u = s / 16
           const a = 1 - u
           pts.push({
-            x: a * a * ml.origin.x + 2 * a * u * this.geom.center.x + u * u * exitEdge.x,
-            y: a * a * ml.origin.y + 2 * a * u * this.geom.center.y + u * u * exitEdge.y,
+            x: a * a * ml.origin.x + 2 * a * u * ctrl.x + u * u * exitEdgeStart.x,
+            y: a * a * ml.origin.y + 2 * a * u * ctrl.y + u * u * exitEdgeStart.y,
           })
         }
         // straight exit lane away from the junction
@@ -75,8 +88,8 @@ export class CarSim {
         for (let s = 1; s <= steps; s++) {
           const u = s / steps
           pts.push({
-            x: exitEdge.x + exit.x * SPAWN_DIST * u,
-            y: exitEdge.y + exit.y * SPAWN_DIST * u,
+            x: exitEdgeStart.x + exit.x * SPAWN_DIST * u,
+            y: exitEdgeStart.y + exit.y * SPAWN_DIST * u,
           })
         }
         const cum = [0]

@@ -1,5 +1,5 @@
 import type { Junction, Phase, SignalPlan } from '../model/types'
-import { LANE_PX, type JunctionGeom } from './canvasGeometry'
+import { LANE_PX, ROAD_LEN, type JunctionGeom } from './canvasGeometry'
 import type { CarPos, CarSim } from './carSim'
 
 const TURN_COLORS: Record<string, string> = {
@@ -13,6 +13,7 @@ const GREEN = '#4ade80'
 const GRAY = '#64748b'
 const ASPHALT = '#0b1220'
 const MARKING = '#475569'
+const CENTER_LINE = '#94a3b8'
 
 export function drawJunction(
   ctx: CanvasRenderingContext2D,
@@ -29,14 +30,13 @@ export function drawJunction(
   ctx.fillStyle = '#1e293b'
   ctx.fillRect(0, 0, 640, 640)
 
-  // roads: one wide band per approach, sized to its lane count
+  // two-way roads: full width covers incoming + outgoing lanes
   junction.approaches.forEach((app, ai) => {
     const lane = geom.lanes[ai]
     const half = lane.width / 2
-    const far = 400
     const corners = [
-      { x: lane.stop.x + lane.lateral.x * half + lane.inbound.x * far, y: lane.stop.y + lane.lateral.y * half + lane.inbound.y * far },
-      { x: lane.stop.x - lane.lateral.x * half + lane.inbound.x * far, y: lane.stop.y - lane.lateral.y * half + lane.inbound.y * far },
+      { x: lane.stop.x + lane.lateral.x * half + lane.inbound.x * ROAD_LEN, y: lane.stop.y + lane.lateral.y * half + lane.inbound.y * ROAD_LEN },
+      { x: lane.stop.x - lane.lateral.x * half + lane.inbound.x * ROAD_LEN, y: lane.stop.y - lane.lateral.y * half + lane.inbound.y * ROAD_LEN },
       { x: lane.stop.x - lane.lateral.x * half - lane.inbound.x * 22, y: lane.stop.y - lane.lateral.y * half - lane.inbound.y * 22 },
       { x: lane.stop.x + lane.lateral.x * half - lane.inbound.x * 22, y: lane.stop.y + lane.lateral.y * half - lane.inbound.y * 22 },
     ]
@@ -47,15 +47,29 @@ export function drawJunction(
     ctx.closePath()
     ctx.fill()
 
-    // lane divider dashes
+    // center line separating incoming and outgoing halves
+    ctx.strokeStyle = CENTER_LINE
+    ctx.lineWidth = 2
+    ctx.setLineDash([10, 8])
+    ctx.beginPath()
+    ctx.moveTo(lane.stop.x + lane.inbound.x * ROAD_LEN, lane.stop.y + lane.inbound.y * ROAD_LEN)
+    ctx.lineTo(lane.stop.x - lane.inbound.x * 22, lane.stop.y - lane.inbound.y * 22)
+    ctx.stroke()
+    ctx.setLineDash([])
+
+    // dashed lane dividers within each half
     ctx.strokeStyle = MARKING
     ctx.lineWidth = 1
     ctx.setLineDash([6, 6])
     for (let l = 1; l < app.lanes; l++) {
-      const off = l * LANE_PX - half
+      const off = l * LANE_PX
       ctx.beginPath()
-      ctx.moveTo(lane.stop.x + lane.lateral.x * off + lane.inbound.x * far, lane.stop.y + lane.lateral.y * off + lane.inbound.y * far)
-      ctx.lineTo(lane.stop.x + lane.lateral.x * off, lane.stop.y + lane.lateral.y * off)
+      ctx.moveTo(lane.stop.x + lane.lateral.x * off + lane.inbound.x * ROAD_LEN, lane.stop.y + lane.lateral.y * off + lane.inbound.y * ROAD_LEN)
+      ctx.lineTo(lane.stop.x + lane.lateral.x * off - lane.inbound.x * 22, lane.stop.y + lane.lateral.y * off - lane.inbound.y * 22)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(lane.stop.x - lane.lateral.x * off + lane.inbound.x * ROAD_LEN, lane.stop.y - lane.lateral.y * off + lane.inbound.y * ROAD_LEN)
+      ctx.lineTo(lane.stop.x - lane.lateral.x * off - lane.inbound.x * 22, lane.stop.y - lane.lateral.y * off - lane.inbound.y * 22)
       ctx.stroke()
     }
     ctx.setLineDash([])
@@ -72,25 +86,43 @@ export function drawJunction(
       phase.movements.some((m) => m.approach === ai && m.movement === mi),
     )
 
-    // stop bar across the road = traffic light
-    const half = lane.width / 2
+    // stop bar spans only the incoming half of the road
+    const inW = app.lanes * LANE_PX
     ctx.strokeStyle = green ? GREEN : RED
     ctx.lineWidth = 5
     ctx.beginPath()
-    ctx.moveTo(lane.stop.x - lane.lateral.x * half, lane.stop.y - lane.lateral.y * half)
-    ctx.lineTo(lane.stop.x + lane.lateral.x * half, lane.stop.y + lane.lateral.y * half)
+    ctx.moveTo(lane.stop.x, lane.stop.y)
+    ctx.lineTo(lane.stop.x + lane.lateral.x * inW, lane.stop.y + lane.lateral.y * inW)
     ctx.stroke()
+
+    // traffic light head beside the road, facing incoming traffic:
+    // a post with a red/green lens, placed on the incoming side
+    const lx = lane.stop.x + lane.lateral.x * (inW + 14) + lane.inbound.x * 10
+    const ly = lane.stop.y + lane.lateral.y * (inW + 14) + lane.inbound.y * 10
+    ctx.strokeStyle = '#94a3b8'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(lx, ly)
+    ctx.lineTo(lx - lane.inbound.x * 10, ly - lane.inbound.y * 10)
+    ctx.stroke()
+    ctx.fillStyle = '#0f172a'
+    ctx.beginPath()
+    ctx.arc(lx, ly, 7, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = green ? GREEN : RED
+    ctx.beginPath()
+    ctx.arc(lx, ly, 5, 0, Math.PI * 2)
+    ctx.fill()
 
     // per-turn arrow painted on each movement's own lane
     app.movements.forEach((m, mi) => {
       const ml = geom.movementLanes.get(`${ai}:${mi}`)
       if (!ml) return
-      const cx = ml.origin.x + lane.inbound.x * 26
-      const cy = ml.origin.y + lane.inbound.y * 26
+      const cx = ml.origin.x + lane.inbound.x * 24
+      const cy = ml.origin.y + lane.inbound.y * 24
       const active = phase.movements.some((x) => x.approach === ai && x.movement === mi)
       drawTurnGlyph(ctx, m.turn, cx, cy, lane.inbound, active ? TURN_COLORS[m.turn] : GRAY)
     })
-
   })
 
   // moving cars
@@ -108,12 +140,15 @@ export function drawJunction(
     ctx.restore()
   })
 
-  // HUD
+  // HUD and stats in a side panel, away from the roads
+  const px = 470
+  ctx.fillStyle = '#0f172acc'
+  ctx.fillRect(px - 8, 10, 172, 200)
   ctx.fillStyle = '#e2e8f0'
-  ctx.font = '14px sans-serif'
-  ctx.fillText(`t = ${t.toFixed(1)}s`, 12, 24)
-  ctx.fillText(`Phase ${activePhase + 1} green left: ${greenLeft.toFixed(0)}s`, 12, 44)
-  ctx.fillText(`Cycle plan: ${plan.greenSec.join('/')}s`, 12, 64)
+  ctx.font = '13px sans-serif'
+  ctx.fillText(`t = ${t.toFixed(1)}s`, px, 30)
+  ctx.fillText(`Phase ${activePhase + 1}, green left ${greenLeft.toFixed(0)}s`, px, 50)
+  ctx.fillText(`Cycle: ${plan.greenSec.join('/')}s`, px, 70)
 
   // live stats per movement
   const stats = carSim.stats()
@@ -124,55 +159,46 @@ export function drawJunction(
     const turn = app.movements[mi].turn[0].toUpperCase()
     return `${heading}${turn}`
   }
-  ctx.font = '12px sans-serif'
+  ctx.font = '11px sans-serif'
   ctx.fillStyle = '#94a3b8'
-  ctx.fillText('Movement', 12, 92)
-  ctx.fillText('Queued', 100, 92)
-  ctx.fillText('Flow', 160, 92)
-  ctx.fillText('Demand', 230, 92)
+  ctx.fillText('Mov', px, 92)
+  ctx.fillText('Queue', px + 42, 92)
+  ctx.fillText('Flow/Demand', px + 90, 92)
   stats.forEach((s, i) => {
-    const y = 108 + i * 16
+    const y = 106 + i * 15
     ctx.fillStyle = TURN_COLORS[s.turn] ?? '#e2e8f0'
-    ctx.fillText(labelOf(s.key), 12, y)
+    ctx.fillText(labelOf(s.key), px, y)
     ctx.fillStyle = '#e2e8f0'
-    ctx.fillText(String(s.queued), 100, y)
-    ctx.fillText(`${Math.round(s.actualVph)} veh/h`, 160, y)
-    ctx.fillStyle = s.actualVph > 0 && s.actualVph < s.demandVph * 0.7 ? '#f87171' : '#94a3b8'
-    ctx.fillText(`${s.demandVph} veh/h`, 230, y)
-    // small bar: actual vs demand
-    const barMax = 60
-    const scale = s.demandVph > 0 ? Math.min(s.actualVph / s.demandVph, 1) : 0
-    ctx.fillStyle = '#334155'
-    ctx.fillRect(300, y - 9, barMax, 8)
-    ctx.fillStyle = scale >= 0.99 ? '#4ade80' : scale >= 0.7 ? '#fbbf24' : '#f87171'
-    ctx.fillRect(300, y - 9, barMax * scale, 8)
+    ctx.fillText(String(s.queued), px + 48, y)
+    const ratio = s.demandVph > 0 ? Math.min(s.actualVph / s.demandVph, 1) : 0
+    ctx.fillStyle = ratio >= 0.99 ? '#4ade80' : ratio >= 0.7 ? '#fbbf24' : '#f87171'
+    ctx.fillRect(px + 90, y - 8, 60 * ratio, 8)
+    ctx.strokeStyle = '#334155'
+    ctx.lineWidth = 1
+    ctx.strokeRect(px + 90, y - 8, 60, 8)
   })
 
-  // legend
-  const lx = 470
-  ctx.font = '12px sans-serif'
+  // legend bottom-left, away from roads
+  const lx2 = 14
+  ctx.font = '11px sans-serif'
   ctx.fillStyle = '#94a3b8'
-  ctx.fillText('Legend', lx, 500)
+  ctx.fillText('Legend', lx2, 596)
   const north = { x: 0, y: -1 }
   const legendGlyphs: [string, string][] = [
-    ['left', 'left turn'],
+    ['left', 'left'],
     ['through', 'through'],
-    ['right', 'right turn'],
+    ['right', 'right'],
   ]
   legendGlyphs.forEach(([turn, label], i) => {
-    const y = 520 + i * 22
-    drawTurnGlyph(ctx, turn, lx + 10, y, north, TURN_COLORS[turn])
+    const y = 610 + i * 12
+    drawTurnGlyph(ctx, turn, lx2 + 8, y, north, TURN_COLORS[turn])
     ctx.fillStyle = '#94a3b8'
-    ctx.fillText(label, lx + 28, y + 4)
+    ctx.fillText(label, lx2 + 22, y + 4)
   })
   ctx.fillStyle = '#fbbf24'
-  ctx.fillRect(lx + 6, 584, 10, 12)
+  ctx.fillRect(lx2 + 80, 606, 10, 8)
   ctx.fillStyle = '#94a3b8'
-  ctx.fillText('queued car (its lane color = moving)', lx + 24, 594)
-  ctx.fillStyle = GREEN
-  ctx.fillRect(lx + 2, 602, 16, 4)
-  ctx.fillStyle = '#94a3b8'
-  ctx.fillText('stop bar = light', lx + 28, 606)
+  ctx.fillText('waiting car', lx2 + 96, 614)
 }
 
 function drawTurnGlyph(
@@ -181,15 +207,14 @@ function drawTurnGlyph(
   x: number,
   y: number,
   inbound: { x: number; y: number },
-  colorOverride?: string,
+  color: string,
 ) {
-  // rotate: glyph drawn assuming traffic flows upward (inbound = (0,-1))
+  // glyph drawn assuming traffic flows upward (inbound = (0,-1))
   const angle = Math.atan2(inbound.y, inbound.x) - Math.atan2(-1, 0)
   ctx.save()
   ctx.translate(x, y)
   ctx.rotate(angle)
-  const color = colorOverride ?? ctx.strokeStyle
-  ctx.strokeStyle = color as string
+  ctx.strokeStyle = color
   ctx.lineWidth = 2
   ctx.beginPath()
   if (turn === 'through') {

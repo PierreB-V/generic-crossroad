@@ -1,6 +1,6 @@
 import type { Junction, MovementRef, Phase, SignalPlan } from './types'
 
-const HEADING_VECTORS: Record<number, { x: number; y: number }> = {
+export const HEADING_VEC: Record<number, { x: number; y: number }> = {
   0: { x: 0, y: -1 },
   90: { x: 1, y: 0 },
   180: { x: 0, y: 1 },
@@ -10,7 +10,7 @@ const HEADING_VECTORS: Record<number, { x: number; y: number }> = {
 /** Normalized travel vector for a movement leaving the junction. */
 export function movementVector(junction: Junction, ref: MovementRef): { x: number; y: number } {
   const app = junction.approaches[ref.approach]
-  const incoming = HEADING_VECTORS[((app.heading % 360) + 360) % 360] ?? { x: 0, y: 0 }
+  const incoming = HEADING_VEC[((app.heading % 360) + 360) % 360] ?? { x: 0, y: 0 }
   const inv = { x: -incoming.x, y: -incoming.y }
   const turn = app.movements[ref.movement].turn
   if (turn === 'through') return inv
