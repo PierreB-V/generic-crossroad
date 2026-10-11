@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Junction, Phase, SignalPlan } from '../model/types'
-import { HEADING_VEC, layout } from './canvasGeometry'
+import { layout } from './canvasGeometry'
 import { drawJunction } from './canvasRender'
+import { CarSim } from './carSim'
 
 interface Props {
   junction: Junction
@@ -28,16 +29,22 @@ export function Visualizer({ junction, phases, optimizedPlan, baselinePlan }: Pr
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     const geom = layout(junction)
+    const carSim = new CarSim(junction, geom)
 
     const frame = (ts: number) => {
+      const dt = lastRef.current ? Math.min((ts - lastRef.current) / 1000, 0.1) : 0
+      lastRef.current = ts
       if (playing) {
-        const dt = lastRef.current ? Math.min((ts - lastRef.current) / 1000, 0.1) : 0
         timeRef.current = (timeRef.current + dt * speed) % (cycleSec || 1)
       }
-      lastRef.current = ts
       const t = timeRef.current
       const { phaseIdx, greenLeft } = phaseAt(plan, junction.amberSec, t)
-      drawJunction(ctx, junction, geom, phases, phaseIdx, greenLeft, plan, t)
+      if (playing) {
+        const green = new Set<string>()
+        plan.phases[phaseIdx].movements.forEach((m) => green.add(`${m.approach}:${m.movement}`))
+        carSim.step(dt * speed, green)
+      }
+      drawJunction(ctx, junction, geom, phases, phaseIdx, greenLeft, plan, t, carSim.positions(), carSim)
       rafRef.current = requestAnimationFrame(frame)
     }
     rafRef.current = requestAnimationFrame(frame)
@@ -96,5 +103,3 @@ export function phaseAt(plan: SignalPlan, amberSec: number, t: number): { phaseI
   }
   return { phaseIdx: 0, greenLeft: plan.greenSec[0] }
 }
-
-export { HEADING_VEC }
