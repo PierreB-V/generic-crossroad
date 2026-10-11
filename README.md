@@ -7,6 +7,8 @@ Optimize traffic-signal timing at a crossroad with a genetic algorithm.
 - A genetic algorithm evolves phase durations and phase order to minimize delay.
 - 2D canvas visualization shows the junction, lights and queued cars.
 
+<img width="611" height="389" alt="image" src="https://github.com/user-attachments/assets/6bd793ce-2d0b-4403-904a-89fa9db4fa13" />
+
 ## Dev
 
 ```bash
